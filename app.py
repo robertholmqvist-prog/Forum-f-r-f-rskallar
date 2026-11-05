@@ -1,5 +1,6 @@
 from flask import Flask, session, redirect, url_for, request
 import mysql.connector
+import datetime
 from mysql.connector import Error
 
 app = Flask(__name__)
@@ -32,15 +33,15 @@ def query(sql, params=(), fetchone=False):
         conn.close()    # viktigt: stäng anslutningen!
 
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    username = session.get('username')
+    användarnamn = session.get('användarnamn')
 
-    if username:
+    if användarnamn:
         # Hämta färsk info från databasen – inte från sessionen!
         user = query(
-            'SELECT id, username, description FROM users WHERE username = %s',
-            (username,),
+            'SELECT id, användarnamn, namn FROM users WHERE användarnamn = %s',
+            (användarnamn,),
             fetchone=True
         )
 
@@ -50,12 +51,11 @@ def index():
             return redirect(url_for('index'))
 
         return f'''
-            <h1>Välkommen, {user['username']}!</h1>
-            <p>Beskrivning: {user['description']}</p>
+            <h1>Välkommen, {user['användarnamn']}!</h1>
             <p>Ditt id i databasen: {user['id']}</p>
             <ul>
                 <li><a href="/profile">Min profil</a></li>
-                <li><a href="/secret">Hemlig sida (kräver inloggning)</a></li>
+                <li><a href="/forum">forum</a></li>
                 <li><a href="/session-info">Visa sessionens innehåll</a></li>
                 <li><a href="/logout">Logga ut</a></li>
             </ul>
@@ -66,23 +66,24 @@ def index():
             <p>Du måste logga in för att se mer.</p>
             <a href="/login">Logga in</a>
         '''
+        
 
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        användarnamn = request.form['användarnamn']
+        lösenord = request.form['lösenord']
 
         user = query(
-            'SELECT id, username, password FROM users WHERE username = %s',
-            (username,),
+            'SELECT id, användarnamn, lösenord FROM users WHERE användarnamn = %s',
+            (användarnamn,),
             fetchone=True
         )
 
         # Kolla att användaren finns OCH att lösenordet stämmer
-        if user and user['password'] == password:
-            session['username'] = user['username']
+        if user and user['lösenord'] == lösenord:
+            session['användarnamn'] = user['användarnamn']
             return redirect(url_for('index'))
         else:
             return 'Fel användarnamn eller lösenord. <a href="/login">Försök igen</a>'
@@ -90,8 +91,8 @@ def login():
     return '''
         <h1>Logga in</h1>
         <form method="post">
-            Användarnamn: <input type="text" name="username"><br>
-            Lösenord:     <input type="password" name="password"><br>
+            Användarnamn: <input type="text" name="användarnamn"><br>
+            Lösenord:     <input type="password" name="lösenord"><br>
             <input type="submit" value="Logga in">
         </form>
     '''
@@ -99,33 +100,66 @@ def login():
 
 @app.route('/profile')
 def profile():
-    if 'username' not in session:
+    if 'användarnamn' not in session:
         return redirect(url_for('login'))
 
     user = query(
-        'SELECT id, username, description FROM users WHERE username = %s',
-        (session['username'],),
+        'SELECT id, användarnamn, namn FROM users WHERE användarnamn = %s',
+        (session['användarnamn'],),
         fetchone=True
     )
 
     return f'''
-        <h1>Profil för {user['username']}</h1>
+        <h1>Profil för {user['användarnamn']}</h1>
         <p>Id: {user['id']}</p>
-        <p>Beskrivning: {user['description']}</p>
         <p><a href="/">Tillbaka</a></p>
     '''
 
 
-@app.route('/secret')
-def secret():
-    if 'username' not in session:
-        return redirect(url_for('login'))
+
+@app.route('/forum', methods=['GET', 'POST'])
+def forum():
+    if request.method == 'POST':
+        # Läs in formulärdata
+        name = request.form['användarnamn']
+        text = request.form['inlägg']
+
+        # Spara i databasen
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            'INSERT INTO posts (användarnamn, inlägg) VALUES (%s, %s)',
+            (name, text)
+        )
+        conn.commit()
+        conn.close()
+
+        # Skicka tillbaka användaren till GET-sidan (undvik omsändning)
+        return redirect(url_for('forum'))
+
+    # GET: hämta alla inlägg och visa formulär + lista
+    conn = get_db()
+    cur = conn.cursor(dictionary=True)
+    cur.execute('SELECT användarnamn, inlägg FROM posts ORDER BY id DESC')
+    posts = cur.fetchall()
+    conn.close()
+
+    rows = ''.join(
+        f'<li><b>{p["användarnamn"]}</b>: {p["inlägg"]}</li>' for p in posts
+    )
 
     return f'''
-        <h1>🔒 Hemlig sida</h1>
-        <p>Bara {session['username']} kan se detta.</p>
-        <p><a href="/">Tillbaka</a></p>
+        <h1>Nytt inlägg</h1>
+        <form method="post">
+            Användarnamn: <input type="text" name="användarnamn"><br>
+            Inlägg: <input type="text" name="inlägg"><br>
+            <input type="submit" value="Spara">
+        </form>
+
+        <h2>Inlägg</h2>
+        <ul>{rows}</ul>
     '''
+
 
 
 @app.route('/logout')
