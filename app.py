@@ -52,11 +52,8 @@ def index():
 
         return f'''
             <h1>Välkommen, {user['användarnamn']}!</h1>
-            <p>Ditt id i databasen: {user['id']}</p>
             <ul>
-                <li><a href="/profile">Min profil</a></li>
                 <li><a href="/forum">forum</a></li>
-                <li><a href="/session-info">Visa sessionens innehåll</a></li>
                 <li><a href="/logout">Logga ut</a></li>
             </ul>
         '''
@@ -98,23 +95,6 @@ def login():
     '''
 
 
-@app.route('/profile')
-def profile():
-    if 'användarnamn' not in session:
-        return redirect(url_for('login'))
-
-    user = query(
-        'SELECT id, användarnamn, namn FROM users WHERE användarnamn = %s',
-        (session['användarnamn'],),
-        fetchone=True
-    )
-
-    return f'''
-        <h1>Profil för {user['användarnamn']}</h1>
-        <p>Id: {user['id']}</p>
-        <p><a href="/">Tillbaka</a></p>
-    '''
-
 
 
 @app.route('/forum', methods=['GET', 'POST'])
@@ -140,12 +120,12 @@ def forum():
     # GET: hämta alla inlägg och visa formulär + lista
     conn = get_db()
     cur = conn.cursor(dictionary=True)
-    cur.execute('SELECT användarnamn, inlägg FROM posts ORDER BY id DESC')
+    cur.execute('SELECT användarnamn, inlägg, tidpunkt FROM posts ORDER BY id DESC')
     posts = cur.fetchall()
     conn.close()
 
     rows = ''.join(
-        f'<li><b>{p["användarnamn"]}</b>: {p["inlägg"]}</li>' for p in posts
+        f'<li><b>{p["användarnamn"]}</b>: {p["inlägg"]} (<i>{p["tidpunkt"]}</i>)</li>' for p in posts
     )
 
     return f'''
@@ -168,9 +148,7 @@ def logout():
     return redirect(url_for('index'))
 
 
-@app.route('/session-info')
-def session_info():
-    return f"Session data: {dict(session)}"
+
 
 
 if __name__ == '__main__':
