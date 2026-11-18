@@ -40,7 +40,7 @@ def index():
     if användarnamn:
         # Hämta färsk info från databasen – inte från sessionen!
         user = query(
-            'SELECT id, användarnamn, namn FROM users WHERE användarnamn = %s',
+            'SELECT id, användarnamn FROM users WHERE användarnamn = %s',
             (användarnamn,),
             fetchone=True
         )
@@ -101,15 +101,16 @@ def login():
 def forum():
     if request.method == 'POST':
         # Läs in formulärdata
-        name = request.form['användarnamn']
+        name = session.get('användarnamn')
         text = request.form['inlägg']
+        rubrik = request.form['rubrik']
 
         # Spara i databasen
         conn = get_db()
         cur = conn.cursor()
         cur.execute(
-            'INSERT INTO posts (användarnamn, inlägg) VALUES (%s, %s)',
-            (name, text)
+            'INSERT INTO posts (användarnamn, inlägg, rubrik) VALUES (%s, %s, %s)',
+            (name, text, rubrik)
         )
         conn.commit()
         conn.close()
@@ -120,21 +121,22 @@ def forum():
     # GET: hämta alla inlägg och visa formulär + lista
     conn = get_db()
     cur = conn.cursor(dictionary=True)
-    cur.execute('SELECT användarnamn, inlägg, tidpunkt FROM posts ORDER BY id DESC')
+    cur.execute('SELECT användarnamn, rubrik, inlägg, tidpunkt FROM posts ORDER BY id DESC')
     posts = cur.fetchall()
     conn.close()
 
     rows = ''.join(
-        f'<li><b>{p["användarnamn"]}</b>: {p["inlägg"]} (<i>{p["tidpunkt"]}</i>)</li>' for p in posts
+        f'<br><li><b>{p["användarnamn"]}</b>: <h4>{p["rubrik"]}</h4> {p["inlägg"]} <br>({p["tidpunkt"]})</br></li></br>' for p in posts
     )
 
     return f'''
         <h1>Nytt inlägg</h1>
         <form method="post">
-            Användarnamn: <input type="text" name="användarnamn"><br>
+            Rubrik: <input type="text" name="rubrik"><br>   
             Inlägg: <input type="text" name="inlägg"><br>
             <input type="submit" value="Spara">
         </form>
+        <a href="/">Tillbaka</a>
 
         <h2>Inlägg</h2>
         <ul>{rows}</ul>
